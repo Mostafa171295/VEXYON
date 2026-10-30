@@ -6,11 +6,6 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
-    inputs:
-      commit_screenshots:
-        description: "Commit the captured screenshots into docs/screenshots (so the README shows them)"
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -85,20 +80,26 @@ jobs:
           path: docs/screenshots/*.png
           if-no-files-found: ignore
 
-      - name: Commit screenshots to the repo (manual run only)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_screenshots }}
+      - name: Commit screenshots to the repo (so the README shows them)
+        if: ${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
+        continue-on-error: true
         shell: pwsh
         run: |
+          if (-not (Get-ChildItem docs/screenshots -Filter *.png -ErrorAction SilentlyContinue)) { Write-Host "No screenshots captured"; exit 0 }
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots/*.png
           if (git diff --cached --quiet) { Write-Host "No screenshot changes"; exit 0 }
           git commit -m "docs: update app screenshots [skip ci]"
-          git push
+          git push origin HEAD:${{ github.ref_name }}
 
-      - name: Publish GitHub Release (on tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish GitHub Release (every push to main, and every v* tag)
+        if: ${{ github.event_name != 'pull_request' }}
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}-build.{1}', steps.ver.outputs.version, github.run_number) }}
+          name: VEXYON ${{ steps.ver.outputs.version }} (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
           files: artifacts/*
           generate_release_notes: true
+          make_latest: true
