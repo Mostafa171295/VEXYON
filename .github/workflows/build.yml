@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      commit_screenshots:
+        description: "Commit captured screenshots to docs/screenshots"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -80,18 +85,29 @@ jobs:
           path: docs/screenshots/*.png
           if-no-files-found: ignore
 
-      - name: Commit screenshots to the repo (so the README shows them)
-        if: ${{ github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/') }}
-        continue-on-error: true
+      - name: Commit screenshots to the repo (manual run only)
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.commit_screenshots }}
         shell: pwsh
         run: |
-          if (-not (Get-ChildItem docs/screenshots -Filter *.png -ErrorAction SilentlyContinue)) { Write-Host "No screenshots captured"; exit 0 }
+          $shots = Get-ChildItem docs/screenshots -Filter *.png -ErrorAction SilentlyContinue
+          if (-not $shots) { Write-Host "No screenshots captured - nothing to commit"; exit 0 }
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/screenshots/*.png
-          if (git diff --cached --quiet) { Write-Host "No screenshot changes"; exit 0 }
+
+          git add -- docs/screenshots
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host "No screenshot changes"; exit 0 }
+
           git commit -m "docs: update app screenshots [skip ci]"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+          # the remote may have moved since checkout (new pushes, earlier bot commits)
+          git pull --rebase origin ${{ github.ref_name }}
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
           git push origin HEAD:${{ github.ref_name }}
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Publish GitHub Release (every push to main, and every v* tag)
         if: ${{ github.event_name != 'pull_request' }}

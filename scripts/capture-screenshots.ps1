@@ -68,16 +68,20 @@ try {
     "عن VEXYON"  = "07-about"
   }
 
+  Write-Host ("Found {0} tab(s): {1}" -f $tabs.Count, (($tabs | ForEach-Object { $_.Current.Name }) -join " | "))
+  $saved = 0
   foreach ($tab in $tabs) {
     $name = $tab.Current.Name
-    if (-not $map.Contains($name)) { continue }
+    if (-not $map.Contains($name)) { Write-Host "skip tab '$name' (not in map)"; continue }
     try {
       $sel = $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
       $sel.Select()
       Start-Sleep -Milliseconds 1500
       Save-Window $hwnd (Join-Path $OutDir ($map[$name] + ".png"))
+      $saved++
     } catch { Write-Warning "tab '$name' failed: $_" }
   }
+  if ($saved -eq 0) { throw "No tabs were captured - check the tab names printed above" }
 }
 finally {
   if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
