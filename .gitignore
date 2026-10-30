@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+publish/
+Release/
+Output/
+App/
+artifacts/
+
+# Visual Studio / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Packages
+*.zip

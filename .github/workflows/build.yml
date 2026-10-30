@@ -1,0 +1,104 @@
+name: Build VEXYON
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      commit_screenshots:
+        description: "Commit the captured screenshots into docs/screenshots (so the README shows them)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Read version from VEXYON.csproj
+        id: ver
+        shell: pwsh
+        run: |
+          $v = ([xml](Get-Content VEXYON.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if (-not $v) { $v = "0.0.0" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      - name: Publish (self-contained single-file exe, win-x64)
+        shell: pwsh
+        run: >
+          dotnet publish VEXYON.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None -p:DebugSymbols=false
+          -o publish
+
+      - name: Capture real screenshots of the app
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/capture-screenshots.ps1 -Exe "$PWD\publish\VEXYON.exe" -OutDir "$PWD\docs\screenshots"
+
+      - name: Package zip (exe + docs + project files)
+        shell: pwsh
+        run: |
+          $name  = "VEXYON-v${{ steps.ver.outputs.version }}-win-x64"
+          $stage = Join-Path $PWD "stage\$name"
+          New-Item -ItemType Directory -Force -Path $stage, "$stage\docs", "$stage\source" | Out-Null
+
+          # 1) ready-to-run exe + legal files + user docs
+          Copy-Item publish\VEXYON.exe $stage
+          Copy-Item EULA.txt, THIRD_PARTY_NOTICES.txt, README.md, README.ar.md $stage
+          Copy-Item docs\* $stage\docs -Recurse -Force
+
+          # 2) project source files
+          robocopy . "$stage\source" /E /XD .git .github stage publish bin obj .vs Release Output App /XF *.zip /NFL /NDL /NJH /NJS /NP | Out-Null
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" } else { $global:LASTEXITCODE = 0 }
+
+          # 3) zip + checksum
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          7z a -tzip -mx=9 "artifacts\$name.zip" "$stage\*" | Out-Null
+          (Get-FileHash "artifacts\$name.zip" -Algorithm SHA256).Hash.ToLower() + "  $name.zip" | Set-Content "artifacts\$name.sha256.txt"
+          Get-ChildItem artifacts | Format-Table Name, Length
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VEXYON-v${{ steps.ver.outputs.version }}-win-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots/*.png
+          if-no-files-found: ignore
+
+      - name: Commit screenshots to the repo (manual run only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_screenshots }}
+        shell: pwsh
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/*.png
+          if (git diff --cached --quiet) { Write-Host "No screenshot changes"; exit 0 }
+          git commit -m "docs: update app screenshots [skip ci]"
+          git push
+
+      - name: Publish GitHub Release (on tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

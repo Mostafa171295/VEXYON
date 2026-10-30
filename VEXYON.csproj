@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>VEXYON</AssemblyName>
+    <Product>VEXYON</Product>
+    <Company>Eng Moustafa Khalaf</Company>
+    <Authors>Eng Moustafa Khalaf</Authors>
+    <Copyright>© 2026 Eng Moustafa Khalaf</Copyright>
+    <Description>VEXYON - Personal AI Intelligence</Description>
+    <RootNamespace>VEXYON</RootNamespace>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="mark.png" />
+    <Resource Include="icon.ico" />
+    <Resource Include="logo.png" />
+    <Resource Include="EULA.txt" />
+    <Resource Include="vexyon_calc.py" />
+    <Resource Include="test_vexyon_calc.py" />
+    <Resource Include="vexyon_math.py" />
+    <Resource Include="test_vexyon_math.py" />
+  </ItemGroup>
+</Project>
